@@ -1,7 +1,9 @@
 """
 main.py
 Developed by Alperen Sümeroğlu - YouTube Audio Converter API
-Modified & optimized for VPS by ChatGPT (Public Access Enabled + 403 Fix)
+Modified & optimized for VPS by ChatGPT
+✅ API Key Protection (Static Key = "VNI0X")
+✅ 403 Fix + yt-dlp headers
 """
 
 import secrets
@@ -13,16 +15,20 @@ import yt_dlp
 import access_manager
 from constants import *
 
-# Initialize the Flask application
+# 🔐 Static API Key
+API_KEY = "VNI0X"
+
+# Initialize Flask app
 app = Flask(__name__)
 
 
 @app.route("/", methods=["GET"])
 def handle_audio_request():
-    """
-    Main endpoint to receive a YouTube video URL, download the audio in MP3 format,
-    and return a unique token for accessing the file later.
-    """
+    """Main endpoint: accepts YouTube URL + API key, returns token"""
+    api_key = request.args.get("api_key")
+    if api_key != API_KEY:
+        return jsonify(error="Invalid or missing API key."), 401
+
     video_url = request.args.get("url")
     if not video_url:
         return jsonify(error="Missing 'url' parameter in request."), BAD_REQUEST
@@ -30,7 +36,7 @@ def handle_audio_request():
     filename = f"{uuid4()}.mp3"
     output_path = Path(ABS_DOWNLOADS_PATH) / filename
 
-    # yt-dlp configuration with User-Agent and cookies fix
+    # yt-dlp config with 403 fix
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': str(output_path),
@@ -63,7 +69,11 @@ def handle_audio_request():
 
 @app.route("/download", methods=["GET"])
 def download_audio():
-    """Serve an audio file associated with a valid token."""
+    """Serve audio file by token + API key"""
+    api_key = request.args.get("api_key")
+    if api_key != API_KEY:
+        return jsonify(error="Invalid or missing API key."), 401
+
     token = request.args.get("token")
     if not token:
         return jsonify(error="Missing 'token' parameter in request."), BAD_REQUEST
@@ -82,18 +92,16 @@ def download_audio():
 
 
 def _generate_token_response(filename: str):
-    """Generate a secure download token and return it as JSON."""
+    """Generate secure token for the downloaded file"""
     token = secrets.token_urlsafe(TOKEN_LENGTH)
     access_manager.add_token(token, filename)
     return jsonify(token=token)
 
 
 def main():
-    """Start cleanup thread and Flask app."""
+    """Start background cleanup + Flask app"""
     token_cleaner_thread = threading.Thread(target=access_manager.manage_tokens, daemon=True)
     token_cleaner_thread.start()
-
-    # Run the app publicly on port 7000
     app.run(host="0.0.0.0", port=7000, debug=False)
 
 
