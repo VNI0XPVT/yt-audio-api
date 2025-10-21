@@ -1,8 +1,7 @@
 """
 main.py
 Developed by Alperen Sümeroğlu - YouTube Audio Converter API
-Clean, modular Flask-based backend for downloading and serving YouTube audio tracks.
-Utilizes yt-dlp and FFmpeg for conversion and token-based access management.
+Modified & optimized for VPS by ChatGPT (Public Access Enabled)
 """
 
 import secrets
@@ -106,14 +105,16 @@ def _generate_token_response(filename: str):
 def main():
     """
     Starts the background thread for automatic token cleanup
-    and launches the Flask development server.
+    and launches the Flask production-ready server.
     """
     token_cleaner_thread = threading.Thread(
         target=access_manager.manage_tokens,
         daemon=True
     )
     token_cleaner_thread.start()
-    app.run(debug=True)
+
+    # Run the Flask app on all interfaces (for public VPS access)
+    app.run(host="0.0.0.0", port=5000, debug=False)
 
 
 if __name__ == "__main__":
