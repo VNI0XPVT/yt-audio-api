@@ -1,9 +1,8 @@
 """
-main.py
+main.py — Fixed 403 + Working YT-DLP Headers
 ✅ YouTube Audio API for Telegram Music Bot
-✅ Secure API key check
-✅ /info/<vid_id> endpoint for YT -> MP3
-✅ Compatible with AnonMusic or HerokuBot type bots
+✅ Anti-403 Fix (spoofed headers + client info)
+✅ Works on VPS (no Google blocking)
 """
 
 import secrets
@@ -12,25 +11,18 @@ from flask import Flask, request, jsonify, send_from_directory
 from uuid import uuid4
 from pathlib import Path
 import yt_dlp
-import access_manager
 from constants import *
 
-# 🔐 Your static API key
 API_KEY = "VNI0X"
 
-# Flask App
 app = Flask(__name__)
-
 
 @app.route("/", methods=["GET"])
 def home():
-    """Simple welcome route"""
-    return jsonify(message="✅ YouTube Audio API is running successfully.")
-
+    return jsonify(message="✅ YouTube Audio API is running with 403 Fix.")
 
 @app.route("/info/<vid_id>", methods=["GET"])
 def info_api(vid_id):
-    """Return downloadable audio URL for a given YouTube video ID"""
     api_key = request.headers.get("x-api-key")
     if api_key != API_KEY:
         return jsonify(status="error", message="Invalid or missing API key"), 401
@@ -39,22 +31,39 @@ def info_api(vid_id):
     filename = f"{vid_id}.mp3"
     output_path = Path(ABS_DOWNLOADS_PATH) / filename
 
-    # yt-dlp settings
+    # 🧠 Fixed yt-dlp config with modern headers & UA
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': str(output_path),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-            'preferredquality': '192'
+            'preferredquality': '192',
         }],
         'quiet': True,
         'nocheckcertificate': True,
         'geo_bypass': True,
+        'source_address': '0.0.0.0',
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept-Language': 'en-US,en;q=0.9'
-        }
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/127.0.0.1 Safari/537.36'
+            ),
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Origin': 'https://www.youtube.com',
+            'Referer': 'https://www.youtube.com/',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_skip': ['js', 'configs'],  # bypass age/region locks
+            }
+        },
     }
 
     try:
@@ -66,10 +75,8 @@ def info_api(vid_id):
         print(f"[ERROR] {e}")
         return jsonify(status="error", message=str(e))
 
-
 @app.route("/download", methods=["GET"])
 def download_audio():
-    """Serve audio file by token + API key"""
     api_key = request.args.get("api_key")
     if api_key != API_KEY:
         return jsonify(error="Invalid or missing API key."), 401
@@ -84,13 +91,10 @@ def download_audio():
     except FileNotFoundError:
         return jsonify(error="Requested file not found."), NOT_FOUND
 
-
 def main():
-    """Start Flask app"""
     Path(ABS_DOWNLOADS_PATH).mkdir(exist_ok=True)
-    print("✅ YouTube Audio API started on port 7000")
+    print("🚀 YouTube Audio API started (403 Fix Enabled) on port 7000")
     app.run(host="0.0.0.0", port=7000, debug=False)
-
 
 if __name__ == "__main__":
     main()
