@@ -1,9 +1,9 @@
 """
 main.py
-Developed by Alperen Sümeroğlu - YouTube Audio Converter API
-Modified & optimized for VPS by ChatGPT
-✅ API Key Protection (Static Key = "VNI0X")
-✅ 403 Fix + yt-dlp headers
+✅ YouTube Audio API for Telegram Music Bot
+✅ Secure API key check
+✅ /info/<vid_id> endpoint for YT -> MP3
+✅ Compatible with AnonMusic or HerokuBot type bots
 """
 
 import secrets
@@ -15,28 +15,31 @@ import yt_dlp
 import access_manager
 from constants import *
 
-# 🔐 Static API Key
+# 🔐 Your static API key
 API_KEY = "VNI0X"
 
-# Initialize Flask app
+# Flask App
 app = Flask(__name__)
 
 
 @app.route("/", methods=["GET"])
-def handle_audio_request():
-    """Main endpoint: accepts YouTube URL + API key, returns token"""
-    api_key = request.args.get("api_key")
+def home():
+    """Simple welcome route"""
+    return jsonify(message="✅ YouTube Audio API is running successfully.")
+
+
+@app.route("/info/<vid_id>", methods=["GET"])
+def info_api(vid_id):
+    """Return downloadable audio URL for a given YouTube video ID"""
+    api_key = request.headers.get("x-api-key")
     if api_key != API_KEY:
-        return jsonify(error="Invalid or missing API key."), 401
+        return jsonify(status="error", message="Invalid or missing API key"), 401
 
-    video_url = request.args.get("url")
-    if not video_url:
-        return jsonify(error="Missing 'url' parameter in request."), BAD_REQUEST
-
-    filename = f"{uuid4()}.mp3"
+    video_url = f"https://www.youtube.com/watch?v={vid_id}"
+    filename = f"{vid_id}.mp3"
     output_path = Path(ABS_DOWNLOADS_PATH) / filename
 
-    # yt-dlp config with 403 fix
+    # yt-dlp settings
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': str(output_path),
@@ -47,24 +50,21 @@ def handle_audio_request():
         }],
         'quiet': True,
         'nocheckcertificate': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                          'AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/122.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        },
         'geo_bypass': True,
-        'source_address': '0.0.0.0'
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
+        audio_url = f"http://80.211.130.162:7000/download?api_key={API_KEY}&token={vid_id}"
+        return jsonify(status="success", audio_url=audio_url)
     except Exception as e:
         print(f"[ERROR] {e}")
-        return jsonify(error="Failed to download or convert audio.", detail=str(e)), INTERNAL_SERVER_ERROR
-
-    return _generate_token_response(filename)
+        return jsonify(status="error", message=str(e))
 
 
 @app.route("/download", methods=["GET"])
@@ -78,30 +78,17 @@ def download_audio():
     if not token:
         return jsonify(error="Missing 'token' parameter in request."), BAD_REQUEST
 
-    if not access_manager.has_access(token):
-        return jsonify(error="Token is invalid or unknown."), UNAUTHORIZED
-
-    if not access_manager.is_valid(token):
-        return jsonify(error="Token has expired."), REQUEST_TIMEOUT
-
     try:
-        filename = access_manager.get_audio_file(token)
+        filename = f"{token}.mp3"
         return send_from_directory(ABS_DOWNLOADS_PATH, filename=filename, as_attachment=True)
     except FileNotFoundError:
         return jsonify(error="Requested file not found."), NOT_FOUND
 
 
-def _generate_token_response(filename: str):
-    """Generate secure token for the downloaded file"""
-    token = secrets.token_urlsafe(TOKEN_LENGTH)
-    access_manager.add_token(token, filename)
-    return jsonify(token=token)
-
-
 def main():
-    """Start background cleanup + Flask app"""
-    token_cleaner_thread = threading.Thread(target=access_manager.manage_tokens, daemon=True)
-    token_cleaner_thread.start()
+    """Start Flask app"""
+    Path(ABS_DOWNLOADS_PATH).mkdir(exist_ok=True)
+    print("✅ YouTube Audio API started on port 7000")
     app.run(host="0.0.0.0", port=7000, debug=False)
 
 
